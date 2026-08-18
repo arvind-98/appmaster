@@ -1,0 +1,66 @@
+name: Package MS MARCO MiniLM L6 Cross-Encoder
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  package-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download official model from Hugging Face
+        run: |
+          python -m pip install --upgrade pip huggingface_hub
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download(
+              repo_id="cross-encoder/ms-marco-MiniLM-L6-v2",
+              local_dir="model/ms-marco-MiniLM-L6-v2",
+              local_dir_use_symlinks=False,
+              allow_patterns=[
+                  "config.json",
+                  "model.safetensors",
+                  "pytorch_model.bin",
+                  "tokenizer.json",
+                  "tokenizer_config.json",
+                  "special_tokens_map.json",
+                  "vocab.txt",
+                  "sentence_bert_config.json",
+                  "modules.json",
+              ],
+          )
+          PY
+
+      - name: Remove unnecessary files
+        run: |
+          find model -type f -name '*.bin' -delete
+          find model -type f -name '*.msgpack' -delete
+          find model -type f -name '*.h5' -delete
+
+      - name: Create deployment archive
+        run: |
+          cd model
+          zip -r ../ms-marco-MiniLM-L6-v2.zip ms-marco-MiniLM-L6-v2
+          cd ..
+          sha256sum ms-marco-MiniLM-L6-v2.zip > ms-marco-MiniLM-L6-v2.zip.sha256
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "$VERSION" \
+            ms-marco-MiniLM-L6-v2.zip \
+            ms-marco-MiniLM-L6-v2.zip.sha256 \
+            --title "MS MARCO MiniLM L6 Cross-Encoder $VERSION" \
+            --notes "Packaged deployment copy of cross-encoder/ms-marco-MiniLM-L6-v2 for environments that cannot access Hugging Face directly. Model files are downloaded by this GitHub Action from the official Hugging Face repository at build time."
